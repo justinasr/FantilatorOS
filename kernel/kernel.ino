@@ -98,6 +98,9 @@ void setup() {
   display.clearDisplay();
   display.setTextSize(1); // Draw 2X-scale text
   display.setTextColor(WHITE);
+
+  analogWrite(PWM_PIN_LEFT, currentPowerLeft);
+  analogWrite(PWM_PIN_RIGHT, currentPowerRight);
 }
 
 Button updateButtonState(Button button) {
@@ -206,6 +209,10 @@ void loop() {
         currentPowerLeft = currentPowerRight = currentPower;
       } else if (settingItemIndex == 2 || settingItemIndex == 3) {
         currentPower = *(item->value);
+      }
+      if (settingItemIndex == 1 || settingItemIndex == 2 || settingItemIndex == 3) {
+        analogWrite(PWM_PIN_LEFT, (int)(2.55 * currentPowerLeft));
+        analogWrite(PWM_PIN_RIGHT, (int)(2.55 * currentPowerRight));
       }
     }
     displayRefresh = true;
