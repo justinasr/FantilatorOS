@@ -132,32 +132,38 @@ void loop() {
       .label = F("Speed"),
       .modifiable = true,
       .value = &currentPower,
-      .suffix = "%"
+      .suffix = F("%")
     },
-    { .label = F("Speed left"),
+    { .label = F(" left"),
       .modifiable = true,
       .value = &currentPowerLeft,
-      .suffix = "%"
+      .suffix = F("%")
     },
-    { .label = F("Speed right"),
+    { .label = F(" right"),
       .modifiable = true,
       .value = &currentPowerRight,
-      .suffix = "%"
+      .suffix = F("%")
     },
-    { .label = F("Curr temp"),
+    { .label = F("Temperature"),
       .modifiable = false,
       .value = &temperature,
-      .suffix = "\xF7\x43"
+      .suffix = F("\xF7\x43")
     },
     { .label = F("Humidity"),
       .modifiable = false,
       .value = &humidity,
-      .suffix = "%"
+      .suffix = F("%")
     },
     { .label = F("Build"),
       .modifiable = false,
       .value = 0,
       .suffix = F(__DATE__)
+    }
+    ,
+    { .label = F("Build"),
+      .modifiable = false,
+      .value = 0,
+      .suffix = F(__TIME__)
     }
   };
   int totalMenuItems = sizeof(menuItems) / sizeof(menuItems[0]);
@@ -223,9 +229,21 @@ void loop() {
     display.setCursor(0, 0);
     display.setTextSize(2);
     display.setTextColor(WHITE);
-    display.println("Fantilator");
+    display.println(F("Fantilator"));
     display.setTextSize(1);
-    for (int i = 0; i < totalMenuItems; i++) {
+    int startItem = 0;
+    int endItem = 5;
+    if (currentMenuItem < 3) {
+      startItem = 0;
+      endItem = 5;
+    } else if (currentMenuItem > totalMenuItems - 3) {
+      startItem = totalMenuItems - 5;
+      endItem = totalMenuItems;
+    } else {
+      startItem = currentMenuItem - 2;
+      endItem = currentMenuItem + 3;
+    }
+    for (int i = startItem; i < endItem; i++) {
       if (i == currentMenuItem) {
         display.setTextColor(BLACK, WHITE);
         display.print("\x10");
