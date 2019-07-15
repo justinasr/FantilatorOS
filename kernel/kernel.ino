@@ -28,6 +28,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PWM_PIN_LEFT 9
 #define PWM_PIN_RIGHT 10
 
+#define BUZZER_PIN A0
+
 typedef struct {
   uint8_t pin;
   uint8_t state;
@@ -58,6 +60,8 @@ int8_t currentPower = 0;
 int8_t currentMenuItem = 0;
 int8_t settingItemIndex = -1;
 
+int8_t buzzerPitch = 1;
+
 // the setup routine runs once when you press reset:
 void setup() {
   // initialize serial communication at 9600 bits per second:
@@ -70,6 +74,7 @@ void setup() {
   pinMode(PWM_PIN_LEFT, OUTPUT);
   pinMode(PWM_PIN_RIGHT, OUTPUT);
 
+  pinMode(BUZZER_PIN, INPUT);
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x64
     Serial.println(F("SSD1306 allocation failed"));
@@ -129,6 +134,11 @@ void loop() {
       .value = &currentPowerRight,
       .suffix = F("%")
     },
+    { .label = F("Beep"),
+      .modifiable = true,
+      .value = &buzzerPitch,
+      .suffix = F("")
+    },
     { .label = F("Build"),
       .modifiable = false,
       .value = 0,
@@ -148,19 +158,26 @@ void loop() {
   buttonEnter = updateButtonState(buttonEnter);
 
   int8_t valueAdjustment = 0;
+  bool buzz = false;
+  bool errorBuzz = false;
   if (buttonDown.state == BUTTON_STATE_PRESS || buttonDown.state == BUTTON_STATE_HOLD) {
     valueAdjustment = -1;
+    buzz = true;
   }
 
   if (buttonUp.state == BUTTON_STATE_PRESS || buttonUp.state == BUTTON_STATE_HOLD) {
     valueAdjustment = 1;
+    buzz = true;
   }
 
   if (buttonEnter.state == BUTTON_STATE_PRESS) {
+    buzz = true;
     if (settingItemIndex == -1) {
       MenuItem *item = &menuItems[currentMenuItem];
       if (item->modifiable) {
         settingItemIndex = currentMenuItem;
+      } else {
+        errorBuzz = true;
       }
     } else {
       settingItemIndex = -1;
@@ -176,13 +193,20 @@ void loop() {
       *(item->value) += valueAdjustment;
       if (*(item->value) < 0) {
         *(item->value) = 0;
+        errorBuzz = true;
       } else if (*(item->value) > 100) {
         *(item->value) = 100;
+        errorBuzz = true;
       }
       if (settingItemIndex == 0) {
         currentPowerLeft = currentPowerRight = currentPower;
       } else if (settingItemIndex == 1 || settingItemIndex == 2) {
         currentPower = *(item->value);
+      } else if (settingItemIndex == 3) {
+        if (buzzerPitch > 3) {
+          buzzerPitch = 3;
+          errorBuzz = true;
+        }
       }
       if (settingItemIndex == 0 || settingItemIndex == 1 || settingItemIndex == 2) {
         analogWrite(PWM_PIN_LEFT, (int)(2.55 * currentPowerLeft));
@@ -227,7 +251,19 @@ void loop() {
       if (i == 0 && currentPowerLeft != currentPowerRight) {
         value = "--";
       } else if (item->value) {
-        value = String(*item->value);
+        if (i == 3) {
+          if (*item->value == 0) {
+            value = F("off");
+          } else if (*item->value == 1) {
+            value = F("low");
+          } else if (*item->value == 2) {
+            value = F("medium");
+          } else {
+            value = F("high");
+          }
+        } else {
+          value = String(*item->value);
+        }
       } else {
         value = "";
       }
@@ -249,6 +285,23 @@ void loop() {
       }
     }
     display.display();
+
+    if ((errorBuzz || buzz) && buzzerPitch > 0) {
+      pinMode(BUZZER_PIN, OUTPUT);
+      int iterationDelay = 1200 / buzzerPitch;
+      int iterations = 8 * buzzerPitch;
+      if (errorBuzz) {
+        iterationDelay = 1500;
+        iterations = 20;
+      }
+      for (int i = 0; i < iterations; i ++) {
+        digitalWrite(BUZZER_PIN, HIGH);
+        delayMicroseconds(iterationDelay);
+        digitalWrite(BUZZER_PIN, LOW);
+        delayMicroseconds(iterationDelay);
+      }
+      pinMode(BUZZER_PIN, INPUT);
+    }
   }
 
   delay(LOOP_DELAY);        // delay in between reads for stability
