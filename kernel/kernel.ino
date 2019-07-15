@@ -6,8 +6,6 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-// Temperature measurement
-#include <dht.h>
 
 // Predefined button states
 #define BUTTON_STATE_OFF 0
@@ -26,9 +24,6 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-#define DHT_PIN A0 // Temperature sensor
-#define DHT_DELAY (5000/LOOP_DELAY)
 
 #define PWM_PIN_LEFT 9
 #define PWM_PIN_RIGHT 10
@@ -54,9 +49,6 @@ Button buttonUp = {3, BUTTON_STATE_OFF, 0};
 // Digital pin 4 is enter button
 Button buttonEnter = {4, BUTTON_STATE_OFF, 0};
 
-// Temperature and humidity sensor
-dht DHT;
-
 uint16_t iteration = 0;
 // Current power percentage
 int8_t currentPowerLeft = 0;
@@ -65,9 +57,6 @@ int8_t currentPower = 0;
 
 int8_t currentMenuItem = 0;
 int8_t settingItemIndex = 0;
-
-int8_t temperature = 0;
-int8_t humidity = 0;
 
 // the setup routine runs once when you press reset:
 void setup() {
@@ -80,8 +69,6 @@ void setup() {
   // Make the pwm pin as output
   pinMode(PWM_PIN_LEFT, OUTPUT);
   pinMode(PWM_PIN_RIGHT, OUTPUT);
-
-  pinMode(DHT_PIN, INPUT);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x64
@@ -96,8 +83,6 @@ void setup() {
 
   // Clear the buffer
   display.clearDisplay();
-  display.setTextSize(1); // Draw 2X-scale text
-  display.setTextColor(WHITE);
 
   analogWrite(PWM_PIN_LEFT, currentPowerLeft);
   analogWrite(PWM_PIN_RIGHT, currentPowerRight);
@@ -144,16 +129,6 @@ void loop() {
       .value = &currentPowerRight,
       .suffix = F("%")
     },
-    { .label = F("Temperature"),
-      .modifiable = false,
-      .value = &temperature,
-      .suffix = F("\xF7\x43")
-    },
-    { .label = F("Humidity"),
-      .modifiable = false,
-      .value = &humidity,
-      .suffix = F("%")
-    },
     { .label = F("Build"),
       .modifiable = false,
       .value = 0,
@@ -171,13 +146,6 @@ void loop() {
   buttonDown = updateButtonState(buttonDown);
   buttonUp = updateButtonState(buttonUp);
   buttonEnter = updateButtonState(buttonEnter);
-
-  if (iteration % DHT_DELAY == 0) {
-    DHT.read11(DHT_PIN);
-    temperature = DHT.temperature;
-    humidity = DHT.humidity;
-    displayRefresh = true;
-  }
 
   int8_t valueAdjustment = 0;
   if (buttonDown.state == BUTTON_STATE_PRESS || buttonDown.state == BUTTON_STATE_HOLD) {
