@@ -56,7 +56,7 @@ int8_t currentPowerRight = 0;
 int8_t currentPower = 0;
 
 int8_t currentMenuItem = 0;
-int8_t settingItemIndex = 0;
+int8_t settingItemIndex = -1;
 
 // the setup routine runs once when you press reset:
 void setup() {
@@ -157,34 +157,34 @@ void loop() {
   }
 
   if (buttonEnter.state == BUTTON_STATE_PRESS) {
-    if (settingItemIndex == 0) {
+    if (settingItemIndex == -1) {
       MenuItem *item = &menuItems[currentMenuItem];
       if (item->modifiable) {
-        settingItemIndex = currentMenuItem + 1;
+        settingItemIndex = currentMenuItem;
       }
     } else {
-      settingItemIndex = 0;
+      settingItemIndex = -1;
     }
     displayRefresh = true;
   }
 
   if (valueAdjustment != 0) {
-    if (settingItemIndex == 0) {
+    if (settingItemIndex == -1) {
       currentMenuItem = (totalMenuItems + currentMenuItem - valueAdjustment) % totalMenuItems;
     } else {
-      MenuItem *item = &menuItems[settingItemIndex - 1];
+      MenuItem *item = &menuItems[settingItemIndex];
       *(item->value) += valueAdjustment;
       if (*(item->value) < 0) {
         *(item->value) = 0;
       } else if (*(item->value) > 100) {
         *(item->value) = 100;
       }
-      if (settingItemIndex == 1) {
+      if (settingItemIndex == 0) {
         currentPowerLeft = currentPowerRight = currentPower;
-      } else if (settingItemIndex == 2 || settingItemIndex == 3) {
+      } else if (settingItemIndex == 1 || settingItemIndex == 2) {
         currentPower = *(item->value);
       }
-      if (settingItemIndex == 1 || settingItemIndex == 2 || settingItemIndex == 3) {
+      if (settingItemIndex == 0 || settingItemIndex == 1 || settingItemIndex == 2) {
         analogWrite(PWM_PIN_LEFT, (int)(2.55 * currentPowerLeft));
         analogWrite(PWM_PIN_RIGHT, (int)(2.55 * currentPowerRight));
       }
@@ -235,14 +235,14 @@ void loop() {
       for (int8_t j = 0; j < neededSpaces; j++) {
         display.print(" ");
       }
-      if (i == settingItemIndex - 1) {
+      if (i == settingItemIndex) {
         display.print("\x11");
       } else {
         display.print(" ");
       }
       display.print(value);
       display.print(item->suffix);
-      if (i == settingItemIndex - 1) {
+      if (i == settingItemIndex) {
         display.println("\x10");
       } else {
         display.println(" ");
