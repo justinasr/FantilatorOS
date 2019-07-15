@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <EEPROM.h>
 
 // Predefined button states
 #define BUTTON_STATE_OFF 0
@@ -29,9 +30,17 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define PWM_PIN_RIGHT 10
 
 #define BUZZER_PIN A0
+#define BUZZER_PIN_GND A3
+
+#define SOFT_POWER_PIN 12
+
+#define BUZZER_EEPROM_ADDRESS 0
+#define LEFT_PWM_EEPROM_ADDRESS 1
+#define RIGHT_PWM_EEPROM_ADDRESS 2
 
 typedef struct {
   uint8_t pin;
+  uint8_t pinGnd;
   uint8_t state;
   int holdCounter;
 } Button;
@@ -45,11 +54,11 @@ typedef struct {
 } MenuItem;
 
 // Digital pin 2 is down button
-Button buttonDown = {2, BUTTON_STATE_OFF, 0};
+Button buttonDown = {2, 3, BUTTON_STATE_OFF, 0};
 // Digital pin 3 is up button
-Button buttonUp = {3, BUTTON_STATE_OFF, 0};
+Button buttonUp = {4, 5, BUTTON_STATE_OFF, 0};
 // Digital pin 4 is enter button
-Button buttonEnter = {4, BUTTON_STATE_OFF, 0};
+Button buttonEnter = {6, 7, BUTTON_STATE_OFF, 0};
 
 uint16_t iteration = 0;
 // Current power percentage
@@ -62,19 +71,32 @@ int8_t settingItemIndex = -1;
 
 int8_t buzzerPitch = 1;
 
+bool psuIsOn = false;
+
+void setupButton(Button b) {
+  pinMode(b.pin, INPUT);
+  pinMode(b.pinGnd, OUTPUT);
+  digitalWrite(b.pinGnd, LOW);
+  digitalWrite(b.pin, HIGH);
+}
 // the setup routine runs once when you press reset:
 void setup() {
   // initialize serial communication at 9600 bits per second:
   Serial.begin(9600);
   // Make the button pins an input:
-  pinMode(buttonDown.pin, INPUT);
-  pinMode(buttonUp.pin, INPUT);
-  pinMode(buttonEnter.pin, INPUT);
+  setupButton(buttonDown);
+  setupButton(buttonUp);
+  setupButton(buttonEnter);
   // Make the pwm pin as output
   pinMode(PWM_PIN_LEFT, OUTPUT);
   pinMode(PWM_PIN_RIGHT, OUTPUT);
 
   pinMode(BUZZER_PIN, INPUT);
+  pinMode(BUZZER_PIN_GND, OUTPUT);
+  digitalWrite(BUZZER_PIN_GND, LOW);
+
+  pinMode(SOFT_POWER_PIN, INPUT);
+  digitalWrite(SOFT_POWER_PIN, LOW);
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x64
     Serial.println(F("SSD1306 allocation failed"));
@@ -89,13 +111,24 @@ void setup() {
   // Clear the buffer
   display.clearDisplay();
 
-  analogWrite(PWM_PIN_LEFT, currentPowerLeft);
-  analogWrite(PWM_PIN_RIGHT, currentPowerRight);
+  buzzerPitch = EEPROM.read(BUZZER_EEPROM_ADDRESS);
+  currentPowerLeft = EEPROM.read(LEFT_PWM_EEPROM_ADDRESS);
+  currentPowerRight = EEPROM.read(RIGHT_PWM_EEPROM_ADDRESS);
+  currentPower = currentPowerRight;
+
+  if (currentPowerLeft != 0 || currentPowerRight != 0) {
+    pinMode(SOFT_POWER_PIN, OUTPUT);
+    digitalWrite(SOFT_POWER_PIN, LOW);
+    psuIsOn = true;
+  }
+
+  analogWrite(PWM_PIN_LEFT, (int)(2.55 * currentPowerLeft));
+  analogWrite(PWM_PIN_RIGHT, (int)(2.55 * currentPowerRight));
 }
 
 Button updateButtonState(Button button) {
   uint8_t newState = digitalRead(button.pin);
-  if (newState == 0) {
+  if (newState == 1) {
     button.state = BUTTON_STATE_OFF;
     button.holdCounter = 0;
   } else {
@@ -200,17 +233,33 @@ void loop() {
       }
       if (settingItemIndex == 0) {
         currentPowerLeft = currentPowerRight = currentPower;
-      } else if (settingItemIndex == 1 || settingItemIndex == 2) {
+        EEPROM.write(LEFT_PWM_EEPROM_ADDRESS, currentPowerLeft);
+        EEPROM.write(RIGHT_PWM_EEPROM_ADDRESS, currentPowerRight);
+      } else if (settingItemIndex == 1) {
         currentPower = *(item->value);
+        EEPROM.write(LEFT_PWM_EEPROM_ADDRESS, currentPowerLeft);
+      } else if (settingItemIndex == 2) {
+        currentPower = *(item->value);
+        EEPROM.write(RIGHT_PWM_EEPROM_ADDRESS, currentPowerRight);
       } else if (settingItemIndex == 3) {
         if (buzzerPitch > 3) {
           buzzerPitch = 3;
           errorBuzz = true;
         }
+        EEPROM.write(BUZZER_EEPROM_ADDRESS, buzzerPitch);
       }
       if (settingItemIndex == 0 || settingItemIndex == 1 || settingItemIndex == 2) {
         analogWrite(PWM_PIN_LEFT, (int)(2.55 * currentPowerLeft));
         analogWrite(PWM_PIN_RIGHT, (int)(2.55 * currentPowerRight));
+        if (psuIsOn && currentPowerLeft == 0 && currentPowerRight == 0) {
+          pinMode(SOFT_POWER_PIN, INPUT);
+          digitalWrite(SOFT_POWER_PIN, LOW);
+          psuIsOn = false;
+        } else if (!psuIsOn && (currentPowerLeft != 0 || currentPowerRight != 0)) {
+          pinMode(SOFT_POWER_PIN, OUTPUT);
+          digitalWrite(SOFT_POWER_PIN, LOW);
+          psuIsOn = true;
+        }
       }
     }
     displayRefresh = true;
@@ -248,8 +297,12 @@ void loop() {
       display.print(item->label);
       printedChars += item->label.length();
       String value;
+      int8_t suffixMultiplier = 1;
       if (i == 0 && currentPowerLeft != currentPowerRight) {
-        value = "--";
+        value = F("--");
+      } else if ((i == 0 || i == 1 || i == 2) && currentPowerLeft == 0 && currentPowerRight == 0) {
+        value = F("off");
+        suffixMultiplier = 0;
       } else if (item->value) {
         if (i == 3) {
           if (*item->value == 0) {
@@ -267,7 +320,7 @@ void loop() {
       } else {
         value = "";
       }
-      int8_t neededSpaces = 19 - printedChars - value.length() - item->suffix.length();
+      int8_t neededSpaces = 19 - printedChars - value.length() - (suffixMultiplier * item->suffix.length());
       for (int8_t j = 0; j < neededSpaces; j++) {
         display.print(" ");
       }
@@ -277,7 +330,9 @@ void loop() {
         display.print(" ");
       }
       display.print(value);
-      display.print(item->suffix);
+      if (suffixMultiplier != 0) {
+        display.print(item->suffix);
+      }
       if (i == settingItemIndex) {
         display.println("\x10");
       } else {
